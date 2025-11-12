@@ -56,6 +56,12 @@
 
 
 # Step 1: Import Libraries and Load the Model
+# ============================================================
+# 🎬 IMDB Movie Review Sentiment Analysis (Streamlit App)
+# Author: Uttam Maurya
+# ============================================================
+
+# Step 1: Import Libraries
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.datasets import imdb
@@ -64,70 +70,86 @@ from tensorflow.keras.models import load_model
 import streamlit as st
 import re
 
-# ======================
-# Load IMDB word index
-# ======================
-word_index = imdb.get_word_index()
+# ============================================================
+# Step 2: Load IMDB Word Index
+# ============================================================
+@st.cache_resource
+def load_word_index():
+    word_index = imdb.get_word_index()
+    reverse_word_index = {value + 3: key for key, value in word_index.items()}
+    reverse_word_index[0] = "<PAD>"
+    reverse_word_index[1] = "<START>"
+    reverse_word_index[2] = "<UNK>"
+    reverse_word_index[3] = "<UNUSED>"
+    return word_index, reverse_word_index
 
-# Rebuild reverse_word_index with +3 offset
-reverse_word_index = {value + 3: key for key, value in word_index.items()}
-reverse_word_index[0] = "<PAD>"
-reverse_word_index[1] = "<START>"
-reverse_word_index[2] = "<UNK>"
-reverse_word_index[3] = "<UNUSED>"
+word_index, reverse_word_index = load_word_index()
 
-# Load trained model
-model = load_model("sentiment_model.h5")
+# ============================================================
+# Step 3: Load the Trained Model (cached)
+# ============================================================
+@st.cache_resource
+def load_sentiment_model():
+    # Use the modern .keras format for TensorFlow >= 2.17
+    return load_model("simple_rnn_imdb_fixed.keras")
 
-# ======================
-# Helper Functions
-# ======================
+model = load_sentiment_model()
 
+# ============================================================
+# Step 4: Helper Functions
+# ============================================================
 def decode_review(encoded_review):
-    """Convert numeric review back to readable text."""
+    """Convert numeric review back to readable text (for debugging)."""
     return " ".join([reverse_word_index.get(i, "?") for i in encoded_review])
 
 def preprocess_text(text, max_features=10000, max_len=200):
-    """Convert raw user text into the same format as IMDB training data."""
+    """Convert raw text to same numeric sequence as training data."""
     # Clean & tokenize
     text = text.lower()
     text = re.sub(r"[^a-z0-9\s']", " ", text)
     words = text.split()
 
-    # Convert words to indices (+3 offset for reserved tokens)
+    # Encode words
     encoded_review = [1]  # start token
     for word in words:
-        index = word_index.get(word)
-        if index is not None and index < max_features:
-            encoded_review.append(index + 3)
+        idx = word_index.get(word)
+        if idx is not None and idx < max_features:
+            encoded_review.append(idx + 3)  # +3 offset
         else:
-            encoded_review.append(2)  # unknown token
+            encoded_review.append(2)        # unknown token
 
-    # Pad/truncate to same length as training input
+    # Pad to same length as training input
     padded_review = sequence.pad_sequences([encoded_review], maxlen=max_len)
     return padded_review
 
-# ======================
-# Streamlit UI
-# ======================
+# ============================================================
+# Step 5: Streamlit UI
+# ============================================================
+st.set_page_config(page_title="IMDB Sentiment Classifier", page_icon="🎬", layout="centered")
+
 st.title("🎬 IMDB Movie Review Sentiment Analysis")
-st.write("Enter a movie review below and see whether it’s Positive or Negative.")
+st.write("Enter a movie review below and find out whether it’s **Positive** or **Negative**!")
 
-user_input = st.text_area("✍️ Movie Review")
+user_input = st.text_area("✍️ Write your movie review here:")
 
-if st.button("Classify"):
+if st.button("🔍 Classify Sentiment"):
     if user_input.strip() == "":
-        st.warning("Please type a review first.")
+        st.warning("⚠️ Please type a review before clicking Classify.")
     else:
-        preprocessed_input = preprocess_text(user_input)
-        prediction = model.predict(preprocessed_input)
+        preprocessed = preprocess_text(user_input)
+        prediction = model.predict(preprocessed)
         prob = float(prediction[0][0])
-        sentiment = "😊 Positive" if prob > 0.5 else "😞 Negative"
+        sentiment = "😊 Positive" if prob >= 0.5 else "😞 Negative"
 
-        st.markdown(f"**Sentiment:** {sentiment}")
-        st.markdown(f"**Confidence Score:** `{prob:.4f}`")
+        st.success(f"**Sentiment:** {sentiment}")
+        st.info(f"**Confidence Score:** `{prob:.4f}`")
 
-        # Optional: show tokenized text
-        # st.text(decode_review(preprocessed_input[0]))
+        # Optional: Debug decoded tokens
+        # st.text(decode_review(preprocessed[0]))
+
 else:
-    st.info("Type a review and click *Classify* to see the sentiment.")
+    st.info("💡 Type a review and click *Classify Sentiment* to get started.")
+
+# ============================================================
+# End of File
+# ============================================================
